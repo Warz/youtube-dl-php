@@ -167,6 +167,11 @@ class YoutubeDl
         return array_filter(explode("\n", $process->getOutput()));
     }
 
+    public function getFormats()
+    {
+        return []; // test
+    }
+
     private function jsonDecode($data): array
     {
         $decoded = json_decode($data, true);
