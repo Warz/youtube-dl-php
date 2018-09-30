@@ -42,6 +42,12 @@ class YoutubeDl
      */
     protected $downloadPath;
 
+
+    /**
+     * @var bool
+     */
+    protected $keepMetadataJson = false;
+
     /**
      * @var callable
      */
@@ -82,6 +88,11 @@ class YoutubeDl
     public function setPythonPath(string $pythonPath)
     {
         $this->pythonPath = $pythonPath;
+    }
+
+    public function keepMetadataJson()
+    {
+        $this->keepMetadataJson = true;
     }
 
     /**
@@ -358,7 +369,10 @@ class YoutubeDl
 
         $videoData = $this->jsonDecode(trim(file_get_contents($metadataFile)));
 
-        @unlink($metadataFile);
+        if( ! $this->keepMetadataJson)
+        {
+            @unlink($metadataFile);
+        }
 
         if (!isset($this->options['skip-download']) || false === $this->options['skip-download']) {
             if (isset($this->options['extract-audio']) && true === $this->options['extract-audio']) {
