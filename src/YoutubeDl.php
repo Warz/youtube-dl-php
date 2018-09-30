@@ -168,9 +168,62 @@ class YoutubeDl
         return array_filter(explode("\n", $process->getOutput()));
     }
 
-    public function getFilename()
+    /**
+     * Get filename (remember to pass in option "output")
+     * @param $url
+     * @return string
+     * @throws \Exception
+     */
+    public function getFilename($url)
     {
-        // --get-filename
+        if (!$this->isUrlSupported($url)) {
+            throw new UrlNotSupportedException(sprintf('Provided url "%s" is not supported.', $url));
+        }
+
+        if(!isset($this->options['output']))
+        {
+            throw new \Exception('Please specify output');
+        }
+
+        $arguments = [
+            $url,
+            '--get-filename',
+        ];
+
+        foreach ($this->options as $option => $value) {
+            if ('add-header' === $option) {
+                foreach ($value as $header) {
+                    $arguments[] = sprintf('--%s=%s', $option, $header);
+                }
+            } elseif (is_bool($value)) {
+                $arguments[] = sprintf('--%s', $option);
+            } else {
+                $arguments[] = sprintf('--%s=%s', $option, $value);
+            }
+        }
+
+        $process = $this->createProcess($arguments);
+
+        try {
+            $process->mustRun(function ($type, $buffer) {
+                $debug = $this->debug;
+                $progress = $this->progress;
+
+                if (is_callable($debug)) {
+                    $debug($type, $buffer);
+                }
+
+                if (is_callable($progress) && Process::OUT === $type && preg_match(self::PROGRESS_PATTERN, $buffer, $matches)) {
+                    unset($matches[0], $matches[1], $matches[2], $matches[3], $matches[4]);
+
+                    $progress($matches);
+                }
+            });
+        } catch (\Exception $e) {
+            throw $this->handleException($e);
+        }
+
+        return trim($process->getOutput(),"\n");
     }
 
     /**
@@ -216,7 +269,6 @@ class YoutubeDl
             }
         }
 
-        dump($arguments);
         $process = $this->createProcess($arguments);
 
         try {
@@ -237,17 +289,7 @@ class YoutubeDl
         } catch (\Exception $e) {
             throw $this->handleException($e);
         }
-  /*
-        $process->run();
 
-
-        // executes after the command finishes
-        if (!$process->isSuccessful())
-        {
-            handleException
-            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
-        }
-*/
         $output = explode("\n",$process->getOutput());
         $linesCount = count($output);
 
