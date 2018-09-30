@@ -16,6 +16,7 @@ use YoutubeDl\Exception\NotFoundException;
 use YoutubeDl\Exception\PrivateVideoException;
 use YoutubeDl\Exception\UrlNotSupportedException;
 use YoutubeDl\Exception\YoutubeDlException;
+use YoutubeDl\Exception\GetAddrInfoFailedException;
 
 class YoutubeDl
 {
@@ -167,9 +168,131 @@ class YoutubeDl
         return array_filter(explode("\n", $process->getOutput()));
     }
 
-    public function getFormats()
+    public function getFilename()
     {
-        return []; // test
+        // --get-filename
+    }
+
+    /**
+     * Retrive array with all formats.
+     *
+     * Example:
+     * 0 => [ "code" => "hls-159968mp4a.40.2-nor"
+     *        "extension" => "mp4"
+     *        "resolution" => null
+     *        "note" => "audio only [nor]" ],
+     * 1 => [ "code" => "hls-3375"
+     *        "extension" => "mp4"
+     *        "resolution" => "1280x720"
+     *        "note" => " 3375k , avc1.64001F, 25.0fps, video only" ],
+     * 2 => [ "code" => "hls-6572"
+     *        "extension" => "mp4"
+     *        "resolution" => "1920x1080"
+     *        "note" => " 6572k , avc1.640029, 25.0fps, video only (best)" ]
+     *
+     * @param $url
+     * @return array
+     */
+    public function getFormats($url)
+    {
+        if (!$this->isUrlSupported($url)) {
+            throw new UrlNotSupportedException(sprintf('Provided url "%s" is not supported.', $url));
+        }
+
+        $arguments = [
+            $url,
+            '--list-formats',
+        ];
+
+        foreach ($this->options as $option => $value) {
+            if ('add-header' === $option) {
+                foreach ($value as $header) {
+                    $arguments[] = sprintf('--%s=%s', $option, $header);
+                }
+            } elseif (is_bool($value)) {
+                $arguments[] = sprintf('--%s', $option);
+            } else {
+                $arguments[] = sprintf('--%s=%s', $option, $value);
+            }
+        }
+
+        dump($arguments);
+        $process = $this->createProcess($arguments);
+
+        try {
+            $process->mustRun(function ($type, $buffer) {
+                $debug = $this->debug;
+                $progress = $this->progress;
+
+                if (is_callable($debug)) {
+                    $debug($type, $buffer);
+                }
+
+                if (is_callable($progress) && Process::OUT === $type && preg_match(self::PROGRESS_PATTERN, $buffer, $matches)) {
+                    unset($matches[0], $matches[1], $matches[2], $matches[3], $matches[4]);
+
+                    $progress($matches);
+                }
+            });
+        } catch (\Exception $e) {
+            throw $this->handleException($e);
+        }
+  /*
+        $process->run();
+
+
+        // executes after the command finishes
+        if (!$process->isSuccessful())
+        {
+            handleException
+            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+        }
+*/
+        $output = explode("\n",$process->getOutput());
+        $linesCount = count($output);
+
+        $positionStart = false;
+        for($i=0;$i<$linesCount;$i++)
+        {
+            if(strpos($output[$i],'[info] Available formats for') !== false)
+            {
+                if(strpos($output[$i+1],'format code') !== false)
+                {
+                    $positionStart = $i+2;
+                }
+            }
+        }
+
+        $formats = [];
+
+        // if formats found:
+        if($positionStart)
+        {
+            for($i=$positionStart;$i<$linesCount;$i++)
+            {
+                $line = $output[$i];
+
+                // Split line by where there are a minimum of 2 spaces
+                $line = preg_split("/\s{2,}/", $line);
+
+                if( ! isset($line[1]))
+                {
+                    continue;
+                }
+
+                // Find resolutions (e.g 1920x1080)
+                preg_match('/(\d+)x(\d+)/',$line[2],$matches);
+
+                $formats[] = [
+                    'code' => trim($line[0]),
+                    'extension' => isset($line[1]) ? trim($line[1]): '',
+                    'resolution' => empty($matches) ? null : $matches[0], // we only add resolution to video
+                    'note' => (empty($matches) ? trim($line[2]) : '')  . ' ' . (isset($line[3]) ? trim($line[3]) : ''),
+                ];
+            }
+        }
+
+        return $formats;
     }
 
     private function jsonDecode($data): array
@@ -223,6 +346,9 @@ class YoutubeDl
             return new NotFoundException();
         } elseif (preg_match('/account associated with this video has been terminated/', $message)) {
             return new AccountTerminatedException();
+        } elseif(preg_match('/ERROR: Unable to download webpage: \<urlopen error \[Errno 11001\] getaddrinfo failed\>/',$message)) {
+            // Either proxy failed, or the domain could not be reached.
+            return new GetAddrInfoFailedException();
         }
 
         return $e;
