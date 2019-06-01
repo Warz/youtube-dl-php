@@ -418,12 +418,39 @@ class YoutubeDl
             throw new ExecutableNotFoundException('"youtube-dl" executable was not found. Did you forgot to add it to environment variables? Or set it via $yt->setBinPath(\'/usr/bin/youtube-dl\').');
         }
 
-        array_unshift($arguments, $binPath);
+        // Python running youtube dl in dev mode requires a bit of a different setup:
+        if($binPath === 'PYTHON_DEV')
+        {
 
-        if ($this->pythonPath) {
-            array_unshift($arguments, $this->pythonPath);
+            $this->pythonPath.=' '.$arguments[0];
+            unset($arguments[0]);
+
+
+            $args = '';
+            foreach($arguments as $arg)
+            {
+                $a = explode('=',$arg);
+                if(isset($a[0]) AND isset($a[1]))
+                {
+                    $args .= $a[0].'="'.$a[1].'"'.' ';
+                }
+                else
+                {
+                    $args .= $arg.' ';
+                }
+            }
+            $args = rtrim($args);
+            $arguments = $this->pythonPath.' '.$args;
+        }
+        else
+        {
+            array_unshift($arguments, $binPath);
+            if ($this->pythonPath) {
+                array_unshift($arguments, $this->pythonPath);
+            }
         }
 
+        dump(''.$arguments);
         $process = new Process($arguments);
         $process->setTimeout($this->timeout);
 
@@ -551,6 +578,12 @@ class YoutubeDl
             'ffmpeg-location' => 'string',
             'exec' => 'string',
             'convert-subtitles' => 'string',
+            // I added these
+            'force_generic_extractor' => 'bool',
+            "fragment-retries" => 'int',
+            'no_warnings' => 'bool',
+            'outtmpl' => 'string',
+            'verbose' => 'bool'
         ];
 
         $resolver->setDefined(array_keys($options));
