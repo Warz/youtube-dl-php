@@ -449,8 +449,7 @@ class YoutubeDl
                 array_unshift($arguments, $this->pythonPath);
             }
         }
-
-        dump(''.$arguments);
+        
         $process = new Process($arguments);
         $process->setTimeout($this->timeout);
 
